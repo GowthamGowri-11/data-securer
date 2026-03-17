@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  username        String   @unique
+  password        String
+  email           String?  @unique
+  role            String   @default("user") // "user" or "admin"
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("users")
+}
+
+model SensorData {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   // Owner of this data
+  dataType        String
+  dataValue       String
+  timestamp       DateTime
+  hash            String
+  encryptedData   String
+  blockchainTxHash String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("sensor_data")
+}
+
+model AuditLog {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   // User who performed the action
+  eventType String
+  dataId    String
+  details   String
+  timestamp DateTime @default(now())
+
+  @@map("audit_logs")
+}
