@@ -1,5 +1,5 @@
 {
-  "name": "tamper-detection-system",
+  "name": "data-securer",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -13,9 +13,7 @@
     "blockchain:deploy:sepolia": "cd blockchain && npx hardhat run scripts/deploy.js --network sepolia",
     "blockchain:deploy:mumbai": "cd blockchain && npx hardhat run scripts/deploy.js --network mumbai",
     "blockchain:deploy:bsc": "cd blockchain && npx hardhat run scripts/deploy.js --network bscTestnet",
-    "blockchain:mock": "node scripts/switch-blockchain.js mock",
-    "blockchain:real": "node scripts/switch-blockchain.js real",
-    "blockchain:status": "node scripts/switch-blockchain.js status"
+    "blockchain:status": "cd blockchain && npx hardhat test"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0",

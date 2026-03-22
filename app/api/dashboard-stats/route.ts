@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/database/client';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/dashboard-stats
  * 
@@ -45,32 +47,43 @@ export async function GET(request: NextRequest) {
       where: userFilter,
     });
 
-    // Get audit logs to calculate stats
-    const auditLogs = await prisma.auditLog.findMany({
+    // Get all unique dataIds that have ANY audit logs
+    const allAuditLogs = await prisma.auditLog.findMany({
       where: userFilter,
-      orderBy: {
-        timestamp: 'desc',
-      },
+      select: { dataId: true, eventType: true, timestamp: true },
+      orderBy: { timestamp: 'desc' },
     });
 
-    // Count verified records (VERIFICATION_PASSED events)
-    const verifiedRecords = auditLogs.filter(
-      log => log.eventType === 'VERIFICATION_PASSED'
-    ).length;
+    // Group logs by dataId and get the LATEST event for each
+    const latestEventsMap = new Map<string, string>();
+    const allRecoveredIds = new Set<string>();
+    
+    for (const log of allAuditLogs) {
+      if (!latestEventsMap.has(log.dataId)) {
+        latestEventsMap.set(log.dataId, log.eventType);
+      }
+      if (['RECOVERY_SUCCESS', 'DELETED_DATA_RECOVERED'].includes(log.eventType)) {
+        allRecoveredIds.add(log.dataId);
+      }
+    }
 
-    // Count tampered records (TAMPER_DETECTED events)
-    const tamperedRecords = auditLogs.filter(
-      log => log.eventType === 'TAMPER_DETECTED'
-    ).length;
+    // Active Tampered = Latest event is TAMPER_DETECTED or VERIFICATION_FAILED
+    let tamperedRecords = 0;
+    for (const [dataId, eventType] of latestEventsMap.entries()) {
+      if (['TAMPER_DETECTED', 'VERIFICATION_FAILED'].includes(eventType)) {
+        tamperedRecords++;
+      }
+    }
 
-    // Count recovered records (RECOVERY_SUCCESS events)
-    const recoveredRecords = auditLogs.filter(
-      log => log.eventType === 'RECOVERY_SUCCESS' || log.eventType === 'DELETED_DATA_RECOVERED'
-    ).length;
+    // Recovered records = total unique records ever recovered
+    const recoveredRecords = allRecoveredIds.size;
+
+    // Verified = Total records minus those currently tampered/failed
+    const verifiedRecords = Math.max(0, totalRecords - tamperedRecords);
 
     // Get last verification time
-    const lastVerificationLog = auditLogs.find(
-      log => log.eventType === 'VERIFICATION_PASSED' || log.eventType === 'VERIFICATION_FAILED'
+    const lastVerificationLog = allAuditLogs.find(l => 
+      ['VERIFICATION_PASSED', 'VERIFICATION_FAILED'].includes(l.eventType)
     );
 
     const lastVerification = lastVerificationLog

@@ -12,16 +12,28 @@ interface SensorDataItem {
   blockchainTxHash: string;
 }
 
-export default function DataTable() {
+interface DataTableProps {
+  initialData?: SensorDataItem[];
+}
+
+export default function DataTable({ initialData }: DataTableProps) {
   const { user } = useAuth();
-  const [data, setData] = useState<SensorDataItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<SensorDataItem[]>(initialData || []);
+  const [loading, setLoading] = useState(!initialData);
 
   useEffect(() => {
     if (user) {
-      fetchData();
+      if (!initialData) {
+        fetchData();
+      } else {
+        setLoading(false);
+      }
+      
+      // Still set up polling or refresh if needed
+      const interval = setInterval(fetchData, 30000);
+      return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, initialData]);
 
   const fetchData = async () => {
     if (!user) return;

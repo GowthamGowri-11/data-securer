@@ -76,44 +76,48 @@ class BlockchainConnector {
   private contract: ethers.Contract | null = null;
   private wallet: ethers.Wallet | null = null;
   private hashToIdMap: Map<string, number> = new Map();
+  private proofCache: Map<string, BlockchainProof> = new Map();
+
+  private isInitializing: boolean = false;
+  private initializationPromise: Promise<void> | null = null;
 
   /**
    * Initialize blockchain connection
    */
   async initialize(): Promise<void> {
-    try {
-      const rpcUrl = process.env.BLOCKCHAIN_RPC_URL || process.env.SEPOLIA_RPC_URL;
-      const contractAddress = process.env.CONTRACT_ADDRESS;
-      const privateKey = process.env.PRIVATE_KEY;
+    if (this.initializationPromise) return this.initializationPromise;
 
-      if (!rpcUrl) {
-        throw new Error('BLOCKCHAIN_RPC_URL or SEPOLIA_RPC_URL not set in environment');
+    this.initializationPromise = (async () => {
+      try {
+        const rpcUrl = process.env.BLOCKCHAIN_RPC_URL;
+        const contractAddress = process.env.CONTRACT_ADDRESS;
+        const privateKey = process.env.PRIVATE_KEY;
+
+        if (!rpcUrl || !contractAddress || !privateKey) {
+          console.warn('[Blockchain] Missing environment variables for blockchain. Using mock/null provider.');
+          return;
+        }
+
+        // Connect to blockchain network (non-blocking)
+        this.provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+          staticNetwork: true // Speed up initialization by skipping network detection
+        });
+        
+        // Create wallet instance
+        this.wallet = new ethers.Wallet(privateKey, this.provider);
+        
+        // Connect to smart contract
+        this.contract = new ethers.Contract(contractAddress, CONTRACT_ABI, this.wallet);
+
+        console.log('[Blockchain] ✓ Connected to network');
+      } catch (error) {
+        console.error('[Blockchain] ✗ Initialization failed:', error);
+        this.initializationPromise = null; // Allow retry
+        throw error;
       }
+    })();
 
-      if (!contractAddress) {
-        throw new Error('CONTRACT_ADDRESS not set in environment');
-      }
-
-      if (!privateKey) {
-        throw new Error('PRIVATE_KEY not set in environment');
-      }
-
-      // Connect to blockchain network
-      this.provider = new ethers.JsonRpcProvider(rpcUrl);
-      
-      // Create wallet instance
-      this.wallet = new ethers.Wallet(privateKey, this.provider);
-      
-      // Connect to smart contract
-      this.contract = new ethers.Contract(contractAddress, CONTRACT_ABI, this.wallet);
-
-      console.log('[Blockchain] ✓ Connected to network');
-      console.log('[Blockchain] Contract:', contractAddress);
-      console.log('[Blockchain] Wallet:', this.wallet.address);
-    } catch (error) {
-      console.error('[Blockchain] ✗ Initialization failed:', error);
-      throw error;
-    }
+    return this.initializationPromise;
   }
 
   /**
@@ -191,6 +195,12 @@ class BlockchainConnector {
     await this.ensureInitialized();
 
     try {
+      // Check proof cache first
+      if (this.proofCache.has(hash)) {
+        console.log('[Blockchain] ✓ Proof retrieved from local cache');
+        return this.proofCache.get(hash)!;
+      }
+
       console.log('[Blockchain] Retrieving proof from chain...');
 
       // Get record ID from mapping
@@ -201,7 +211,10 @@ class BlockchainConnector {
         const count = await this.contract!.getDataCount();
         const totalCount = Number(count);
 
-        for (let i = 0; i < totalCount; i++) {
+        console.log(`[Blockchain] Searching ${totalCount} records for hash...`);
+
+        // Search backwards as new records are more likely to be verified
+        for (let i = totalCount - 1; i >= 0; i--) {
           const data = await this.contract!.getData(i);
           if (data[0] === hash) {
             recordId = i;
@@ -225,12 +238,16 @@ class BlockchainConnector {
         timestamp: Number(data[2]),
         blockNumber: 0, // Not stored in contract
         transactionHash: '', // Not stored in contract
-        storedAt: new Date(Number(data[2])),
+        storedAt: new Date(Number(data[2]) * 1000), // Convert to ms if needed (usually unix ts is seconds)
       };
+
+      // Store in cache
+      this.proofCache.set(hash, proof);
 
       console.log('[Blockchain] ✓ Proof retrieved successfully');
       return proof;
-    } catch (error) {
+    }
+ catch (error) {
       console.error('[Blockchain] ✗ Retrieval failed:', error);
       throw new Error(`Blockchain retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

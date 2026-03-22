@@ -6,7 +6,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'TamperGuard - Blockchain Tamper Detection System',
+  title: 'DATA SECURER - Blockchain Tamper Detection System',
   description: 'Secure blockchain-based data integrity and self-recovery system',
 };
 

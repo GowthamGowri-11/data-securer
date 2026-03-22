@@ -48,8 +48,13 @@ import { createAuditLog } from '@/database/queries';
  */
 export async function verifyDataIntegrity(dataId: string): Promise<VerificationResult> {
   try {
-    console.log(`[Verification] Starting integrity check for: ${dataId}`);
-    
+    // Check cache first
+    const cached = verificationCache.get(dataId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log(`[Verification] ✓ Returning cached result for ${dataId}`);
+      return cached.result;
+    }
+
     // Step 1: Fetch data from database
     const dbData = await getSensorDataById(dataId);
     
@@ -66,23 +71,27 @@ export async function verifyDataIntegrity(dataId: string): Promise<VerificationR
     }
     
     // Step 2: Compute hash from current database data
-    console.log('[Verification] Computing current hash...');
     const computedHash = hashSensorData(
       dbData.dataType,
       dbData.dataValue,
       dbData.timestamp
     );
     
-    console.log(`[Verification] Current hash: ${computedHash.slice(0, 16)}...`);
-    console.log(`[Verification] Stored hash:  ${dbData.hash.slice(0, 16)}...`);
-    
     // Step 3: Retrieve original hash from blockchain
-    console.log('[Verification] Fetching blockchain proof...');
     const blockchainProof = await getDataFromBlockchain(dbData.hash);
     
     if (!blockchainProof) {
       console.warn(`[Verification] ⚠ No blockchain proof found`);
       
+      const result: VerificationResult = {
+        isValid: false,
+        dataId,
+        databaseHash: computedHash,
+        blockchainHash: '',
+        timestamp: new Date(),
+        message: 'No blockchain proof found. Data may not have been properly stored.',
+      };
+
       // Log verification event
       await createAuditLog({
         userId: dbData.userId,
@@ -91,33 +100,19 @@ export async function verifyDataIntegrity(dataId: string): Promise<VerificationR
         details: 'No blockchain proof found for this data',
       });
       
-      return {
-        isValid: false,
-        dataId,
-        databaseHash: computedHash,
-        blockchainHash: '',
-        timestamp: new Date(),
-        message: 'No blockchain proof found. Data may not have been properly stored.',
-      };
+      return result;
     }
     
     const blockchainHash = blockchainProof.hash;
     
     // Step 4: Compare hashes
     const isValid = computedHash === blockchainHash;
-    
+    let result: VerificationResult;
+
     if (isValid) {
       console.log('[Verification] ✓ Data integrity verified - No tampering detected');
       
-      // Log successful verification
-      await createAuditLog({
-        userId: dbData.userId,
-        eventType: 'VERIFICATION_PASSED',
-        dataId,
-        details: 'Data integrity verified successfully',
-      });
-      
-      return {
+      result = {
         isValid: true,
         dataId,
         databaseHash: computedHash,
@@ -125,20 +120,18 @@ export async function verifyDataIntegrity(dataId: string): Promise<VerificationR
         timestamp: new Date(),
         message: 'Data integrity verified. No tampering detected.',
       };
-    } else {
-      console.error('[Verification] ✗ TAMPERING DETECTED!');
-      console.error(`[Verification] Expected: ${blockchainHash.slice(0, 16)}...`);
-      console.error(`[Verification] Got:      ${computedHash.slice(0, 16)}...`);
-      
-      // Log tampering detection
+
+      // Log successful verification
       await createAuditLog({
         userId: dbData.userId,
-        eventType: 'TAMPER_DETECTED',
+        eventType: 'VERIFICATION_PASSED',
         dataId,
-        details: `Hash mismatch detected. Database hash: ${computedHash.slice(0, 20)}..., Blockchain hash: ${blockchainHash.slice(0, 20)}...`,
+        details: 'Data integrity verified successfully',
       });
+    } else {
+      console.error('[Verification] ✗ TAMPERING DETECTED!');
       
-      return {
+      result = {
         isValid: false,
         dataId,
         databaseHash: computedHash,
@@ -146,7 +139,20 @@ export async function verifyDataIntegrity(dataId: string): Promise<VerificationR
         timestamp: new Date(),
         message: 'TAMPERING DETECTED! Database hash does not match blockchain hash.',
       };
+
+      // Log tampering detection
+      await createAuditLog({
+        userId: dbData.userId,
+        eventType: 'TAMPER_DETECTED',
+        dataId,
+        details: `Hash mismatch detected. Database hash: ${computedHash.slice(0, 20)}..., Blockchain hash: ${blockchainHash.slice(0, 20)}...`,
+      });
     }
+
+    // Update cache
+    verificationCache.set(dataId, { result, timestamp: Date.now() });
+    
+    return result;
   } catch (error) {
     console.error('[Verification] ✗ Verification error:', error);
     
@@ -175,22 +181,26 @@ export async function verifyDataIntegrity(dataId: string): Promise<VerificationR
  * const tamperedRecords = results.filter(r => !r.isValid);
  * console.log(`Found ${tamperedRecords.length} tampered records`);
  */
+// Short-lived cache for verification results (5 seconds)
+const verificationCache = new Map<string, { result: VerificationResult, timestamp: number }>();
+const CACHE_TTL = 5000;
+
+/**
+ * Verify integrity of all data records
+ */
 export async function verifyAllData(userId?: string): Promise<VerificationResult[]> {
   try {
     console.log(`[Verification] Starting batch verification for ${userId ? `user ${userId}` : 'all users'}...`);
     
-    // Fetch all data records (filtered by userId if provided)
+    // Fetch all data records
     const allData = await getAllSensorData(100, 0, userId);
     
-    console.log(`[Verification] Verifying ${allData.length} records...`);
+    console.log(`[Verification] Verifying ${allData.length} records in parallel...`);
     
-    // Verify each record
-    const results: VerificationResult[] = [];
-    
-    for (const data of allData) {
-      const result = await verifyDataIntegrity(data.id);
-      results.push(result);
-    }
+    // Verify each record in parallel
+    const results = await Promise.all(
+      allData.map(data => verifyDataIntegrity(data.id))
+    );
     
     // Summary
     const validCount = results.filter(r => r.isValid).length;
@@ -237,28 +247,49 @@ export async function quickIntegrityCheck(dataId: string): Promise<boolean> {
   }
 }
 
+import { prisma } from '@/database/client';
+
 /**
  * Get verification statistics
  * 
  * @returns Statistics about verification history
  */
 export async function getVerificationStats(): Promise<{
-  totalRecords: number;
+  totalCount: number;
   lastVerification: Date | null;
   tamperedCount: number;
 }> {
   try {
-    const allData = await getAllSensorData();
+    const totalCount = await prisma.auditLog.count({
+      where: { 
+        eventType: { 
+          in: ['VERIFICATION_PASSED' as any, 'VERIFICATION_FAILED' as any, 'TAMPER_DETECTED' as any] 
+        } 
+      }
+    });
+
+    const tamperedCount = await prisma.auditLog.count({
+      where: { eventType: 'TAMPER_DETECTED' as any }
+    });
+
+    const lastLog = await prisma.auditLog.findFirst({
+      where: { 
+        eventType: { 
+          in: ['VERIFICATION_PASSED' as any, 'VERIFICATION_FAILED' as any, 'TAMPER_DETECTED' as any] 
+        } 
+      },
+      orderBy: { timestamp: 'desc' }
+    });
     
-    // In a real system, you'd query audit logs for this info
     return {
-      totalRecords: allData.length,
-      lastVerification: null, // Would come from audit logs
-      tamperedCount: 0, // Would come from audit logs
+      totalCount,
+      lastVerification: lastLog ? lastLog.timestamp : null,
+      tamperedCount,
     };
   } catch (error) {
+    console.error('[Verification] Failed to get stats:', error);
     return {
-      totalRecords: 0,
+      totalCount: 0,
       lastVerification: null,
       tamperedCount: 0,
     };

@@ -11,6 +11,12 @@ const RegisterSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    
+    // Handle optional empty email
+    if (body.email === '') {
+      delete body.email;
+    }
+    
     const validation = RegisterSchema.safeParse(body);
 
     if (!validation.success) {

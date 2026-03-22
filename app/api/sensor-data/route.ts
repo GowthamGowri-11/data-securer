@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { submitSensorData, fetchAllSensorData } from '@/services/data-service';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Input validation schema
  */

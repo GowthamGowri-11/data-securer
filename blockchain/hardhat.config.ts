@@ -16,7 +16,7 @@ const config: HardhatUserConfig = {
   networks: {
     // Ethereum Sepolia Testnet (Recommended for testing)
     sepolia: {
-      url: process.env.SEPOLIA_RPC_URL || 'https://rpc2.sepolia.org',
+      url: process.env.BLOCKCHAIN_RPC_URL || 'https://rpc2.sepolia.org',
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 11155111,
       timeout: 60000,

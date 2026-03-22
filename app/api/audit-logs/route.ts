@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuditLogs, getAuditLogsByDataId, getAuditLogCount } from '@/database/queries';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/audit-logs
  * 

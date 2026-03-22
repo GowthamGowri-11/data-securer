@@ -16,7 +16,7 @@ export default function LandingPage() {
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
                 <Shield className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">TamperGuard</span>
+              <span className="text-xl font-bold text-white tracking-wider">DATA SECURER</span>
             </div>
             <div className="flex items-center gap-4">
               <Link href="/login">
@@ -50,16 +50,16 @@ export default function LandingPage() {
               <span className="text-sm text-emerald-400 font-medium">Blockchain-Powered Data Integrity</span>
             </div>
 
-            <h1 className="text-5xl md:text-7xl font-bold text-white">
-              Tamper Detection
+            <h1 className="text-6xl md:text-8xl font-black text-white uppercase tracking-tighter leading-none mb-6">
+              DATA
               <br />
-              <span className="bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-                & Self-Recovery
+              <span className="bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-500 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                SECURER
               </span>
             </h1>
 
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-              Create your secure portal to protect critical data with blockchain immutability and automatic recovery
+            <p className="text-xl md:text-2xl text-slate-400 max-w-2xl mx-auto font-light leading-relaxed">
+              Precision data integrity powered by <span className="text-emerald-400 font-medium">blockchain immutability</span> and <span className="text-teal-400 font-medium">autonomous recovery</span>.
             </p>
 
             <div className="flex gap-4 justify-center pt-4">

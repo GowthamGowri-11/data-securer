@@ -17,8 +17,8 @@ export default function Navbar() {
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <Shield className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold text-white">
-              TamperGuard
+            <span className="text-xl font-bold text-white tracking-wider">
+              DATA SECURER
             </span>
           </Link>
           

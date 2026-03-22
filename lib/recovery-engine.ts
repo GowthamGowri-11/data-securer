@@ -52,7 +52,7 @@ import { verifyDataIntegrity } from './verification-engine';
  */
 export async function recoverData(dataId: string): Promise<RecoveryResult> {
   try {
-    console.log(`[Recovery] Starting recovery process for: ${dataId}`);
+    // console.log(`[Recovery] Starting recovery process for: ${dataId}`);
     
     // Step 1: Get current database record (might be null if deleted)
     const dbData = await getSensorDataById(dataId);
@@ -65,7 +65,7 @@ export async function recoverData(dataId: string): Promise<RecoveryResult> {
     
     // Handle TAMPERED data scenario (existing record)
     // Step 2: Verify that tampering actually occurred
-    console.log('[Recovery] Verifying tampering...');
+    // console.log('[Recovery] Verifying tampering...');
     const verificationResult = await verifyDataIntegrity(dataId);
     
     if (verificationResult.isValid) {
@@ -81,7 +81,7 @@ export async function recoverData(dataId: string): Promise<RecoveryResult> {
     console.log('[Recovery] ✓ Tampering confirmed. Proceeding with recovery...');
     
     // Step 3: Retrieve encrypted data from blockchain using the ORIGINAL hash
-    console.log('[Recovery] Retrieving encrypted data from blockchain...');
+    // console.log('[Recovery] Retrieving encrypted data from blockchain...');
     const blockchainProof = await getDataFromBlockchain(verificationResult.blockchainHash);
     
     if (!blockchainProof) {
@@ -571,22 +571,57 @@ export async function previewRecovery(dataId: string): Promise<{
   }
 }
 
+import { prisma } from '@/database/client';
+
 /**
  * Get recovery statistics
  * 
  * @returns Statistics about recovery operations
  */
 export async function getRecoveryStats(): Promise<{
-  totalRecoveries: number;
-  successfulRecoveries: number;
-  failedRecoveries: number;
+  totalCount: number;
+  successRate: number;
   lastRecovery: Date | null;
 }> {
-  // In a real system, this would query audit logs
-  return {
-    totalRecoveries: 0,
-    successfulRecoveries: 0,
-    failedRecoveries: 0,
-    lastRecovery: null,
-  };
+  try {
+    const totalCount = await prisma.auditLog.count({
+      where: { 
+        eventType: { 
+          in: ['RECOVERY_SUCCESS' as any, 'RECOVERY_FAILED' as any, 'DELETED_DATA_RECOVERED' as any, 'DELETED_DATA_RECOVERY_FAILED' as any] 
+        } 
+      }
+    });
+
+    const successCount = await prisma.auditLog.count({
+      where: { 
+        eventType: { 
+          in: ['RECOVERY_SUCCESS' as any, 'DELETED_DATA_RECOVERED' as any] 
+        } 
+      }
+    });
+
+    const lastLog = await prisma.auditLog.findFirst({
+      where: { 
+        eventType: { 
+          in: ['RECOVERY_SUCCESS' as any, 'RECOVERY_FAILED' as any, 'DELETED_DATA_RECOVERED' as any, 'DELETED_DATA_RECOVERY_FAILED' as any] 
+        } 
+      },
+      orderBy: { timestamp: 'desc' }
+    });
+    
+    const successRate = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 100;
+
+    return {
+      totalCount,
+      successRate,
+      lastRecovery: lastLog ? lastLog.timestamp : null,
+    };
+  } catch (error) {
+    console.error('[Recovery] Failed to get stats:', error);
+    return {
+      totalCount: 0,
+      successRate: 100,
+      lastRecovery: null,
+    };
+  }
 }

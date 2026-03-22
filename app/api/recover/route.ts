@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { recoverSingleRecord, autoRecover, previewRecoveryData } from '@/services/recovery-service';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Input validation schema
  */

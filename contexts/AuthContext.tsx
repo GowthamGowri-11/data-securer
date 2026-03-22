@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface User {
@@ -16,7 +16,6 @@ interface AuthContextType {
   isAdmin: boolean;
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
-  loginWithGoogle: (credential: string) => Promise<boolean>;
   logout: () => void;
   checkAuth: () => boolean;
 }
@@ -29,13 +28,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  const logout = useCallback(() => {
+    localStorage.removeItem(AUTH_KEY);
+    // Clear cookie for server-side access
+    document.cookie = `${AUTH_KEY}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
+    setIsAuthenticated(false);
+    setIsAdmin(false);
+    setUser(null);
+    router.push('/');
+  }, [router]);
 
-  const checkAuth = (): boolean => {
+  const checkAuth = useCallback((): boolean => {
     if (typeof window !== 'undefined') {
       const authData = localStorage.getItem(AUTH_KEY);
       if (authData) {
@@ -48,6 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAuthenticated(true);
             setIsAdmin(storedUser.role === 'admin');
             setUser(storedUser);
+            
+            // Ensure cookie is also present (in case it was cleared but localStorage remains)
+            if (!document.cookie.includes(AUTH_KEY)) {
+              document.cookie = `${AUTH_KEY}=${authData}; Path=/; Max-Age=${24 * 60 * 60}`;
+            }
+            
             return true;
           } else {
             logout();
@@ -58,9 +70,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     return false;
-  };
+  }, [logout]);
 
-  const login = async (username: string, password: string): Promise<boolean> => {
+  useEffect(() => {
+    setIsMounted(true);
+    checkAuth();
+  }, [checkAuth]);
+
+  // Prevent hydration mismatch by not rendering until mounted
+  // However, we should still render children to avoid blank screen
+  // unless the authentication state is critical for the layout.
+  // For this project, we can render everything.
+
+  const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -74,7 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: data.user,
           timestamp: Date.now(),
         };
-        localStorage.setItem(AUTH_KEY, JSON.stringify(authData));
+        const authString = JSON.stringify(authData);
+        localStorage.setItem(AUTH_KEY, authString);
+        
+        // Set cookie for server-side access (Next.js Server Components)
+        document.cookie = `${AUTH_KEY}=${authString}; Path=/; Max-Age=${24 * 60 * 60}`;
+        
         setIsAuthenticated(true);
         setIsAdmin(data.user.role === 'admin');
         setUser(data.user);
@@ -85,45 +112,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error('Login error:', error);
       return false;
     }
-  };
+  }, []);
 
-  const loginWithGoogle = async (credential: string): Promise<boolean> => {
-    try {
-      const response = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const authData = {
-          user: data.user,
-          timestamp: Date.now(),
-        };
-        localStorage.setItem(AUTH_KEY, JSON.stringify(authData));
-        setIsAuthenticated(true);
-        setIsAdmin(data.user.role === 'admin');
-        setUser(data.user);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Google login error:', error);
-      return false;
-    }
-  };
-
-  const logout = () => {
-    localStorage.removeItem(AUTH_KEY);
-    setIsAuthenticated(false);
-    setIsAdmin(false);
-    setUser(null);
-    router.push('/');
-  };
+  const value = useMemo(() => ({
+    isAuthenticated,
+    isAdmin,
+    user,
+    login,
+    logout,
+    checkAuth
+  }), [isAuthenticated, isAdmin, user, login, logout, checkAuth]);
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isAdmin, user, login, loginWithGoogle, logout, checkAuth }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

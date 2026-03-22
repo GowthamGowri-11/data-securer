@@ -35,25 +35,25 @@ export async function submitSensorData(
   timestamp: Date
 ): Promise<SensorData> {
   try {
-    console.log(`[DataService] Submitting sensor data for user ${userId}: ${dataType} = ${dataValue}`);
+    // console.log(`[DataService] Submitting sensor data for user ${userId}: ${dataType} = ${dataValue}`);
     
     // Step 1: Generate SHA-256 hash
-    console.log('[DataService] Generating hash...');
+    // console.log('[DataService] Generating hash...');
     const hash = hashSensorData(dataType, dataValue, timestamp);
-    console.log(`[DataService] Hash: ${hash.slice(0, 16)}...`);
+    // console.log(`[DataService] Hash: ${hash.slice(0, 16)}...`);
     
     // Step 2: Encrypt data with AES-256
-    console.log('[DataService] Encrypting data...');
+    // console.log('[DataService] Encrypting data...');
     const encryptedData = encryptSensorData(dataType, dataValue, timestamp);
-    console.log('[DataService] Data encrypted');
+    // console.log('[DataService] Data encrypted');
     
     // Step 3: Store proof on blockchain
-    console.log('[DataService] Storing on blockchain...');
+    // console.log('[DataService] Storing on blockchain...');
     const txHash = await storeDataOnBlockchain(hash, encryptedData, timestamp.getTime());
-    console.log(`[DataService] Blockchain TX: ${txHash.slice(0, 16)}...`);
+    // console.log(`[DataService] Blockchain TX: ${txHash.slice(0, 16)}...`);
     
     // Step 4: Save to database
-    console.log('[DataService] Saving to database...');
+    // console.log('[DataService] Saving to database...');
     const data = await saveSensorData({
       userId,
       dataType,

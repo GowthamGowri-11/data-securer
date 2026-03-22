@@ -1,15 +1,54 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Shield, CheckCircle, AlertTriangle, Loader2, RefreshCw, Database } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function VerificationPage() {
+  const { user } = useAuth();
   const [dataId, setDataId] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    totalCount: 0,
+    tamperedCount: 0,
+    lastVerification: null as string | null
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchStats();
+    }
+  }, [user]);
+
+  const fetchStats = async () => {
+    if (!user) return;
+    try {
+      // We can get verification stats from the audit-logs summary or a specific verify stats endpoint if it exists
+      // The /api/verify GET endpoint provides stats
+      const response = await fetch('/api/verify', {
+        headers: {
+          'x-user-id': user.id,
+          'x-user-role': user.role,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.stats) {
+          setStats(data.stats);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch verification stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const handleVerify = async () => {
     if (!dataId.trim()) {
@@ -26,6 +65,8 @@ export default function VerificationPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-id': user?.id || '',
+          'x-user-role': user?.role || '',
         },
         body: JSON.stringify({ dataId: dataId.trim() }),
       });
@@ -54,7 +95,7 @@ export default function VerificationPage() {
       <div className="flex items-center gap-4">
         <Shield className="w-10 h-10 text-cyan-400 shadow-lg shadow-cyan-500/20" />
         <div>
-          <h1 className="text-4xl font-bold text-white">Verification Engine</h1>
+          <h1 className="text-4xl font-bold text-white uppercase tracking-tight">Data Integrity Engine</h1>
           <p className="text-slate-400 mt-1">Verify data integrity between database and blockchain</p>
         </div>
       </div>
@@ -174,7 +215,7 @@ export default function VerificationPage() {
           <CardContent className="space-y-3 text-sm text-slate-400">
             <div className="flex gap-3">
               <span className="text-cyan-400">1.</span>
-              <span>Retrieve data from PostgreSQL database</span>
+              <span>Retrieve data from MongoDB database</span>
             </div>
             <div className="flex gap-3">
               <span className="text-cyan-400">2.</span>
@@ -198,15 +239,21 @@ export default function VerificationPage() {
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-slate-400 text-sm">Last Check</span>
-              <span className="text-white text-sm">Never</span>
+              <span className="text-white text-sm">
+                {loadingStats ? '...' : (stats.lastVerification ? new Date(stats.lastVerification).toLocaleString() : 'Never')}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-400 text-sm">Total Verifications</span>
-              <span className="text-white text-sm">0</span>
+              <span className="text-white text-sm">
+                {loadingStats ? '...' : stats.totalCount}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-400 text-sm">Tampering Events</span>
-              <span className="text-white text-sm">0</span>
+              <span className="text-red-400 text-sm font-semibold">
+                {loadingStats ? '...' : stats.tamperedCount}
+              </span>
             </div>
           </CardContent>
         </Card>

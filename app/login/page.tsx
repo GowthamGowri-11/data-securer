@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
@@ -14,11 +14,12 @@ declare global {
   }
 }
 
-export default function LoginPage() {
+function LoginContent() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoaded, setGoogleLoaded] = useState(false);
   const auth = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -29,9 +30,15 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
-  const handleGoogleResponse = useCallback(async (response: any) => {
-    if (!auth || !auth.loginWithGoogle) {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!auth || !auth.login) {
       setError('Authentication system not ready');
+      return;
+    }
+
+    if (!username || !password) {
+      setError('Please enter both username and password');
       return;
     }
 
@@ -40,72 +47,23 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const success = await auth.loginWithGoogle(response.credential);
+      const success = await auth.login(username, password);
       
       if (success) {
         router.push('/dashboard');
       } else {
-        setError('Google authentication failed');
+        setError('Invalid username or password');
         setLoading(false);
       }
     } catch (err) {
-      console.error('Google auth error:', err);
-      setError('Failed to authenticate with Google');
+      console.error('Login error:', err);
+      setError('Failed to login. Please try again.');
       setLoading(false);
     }
-  }, [auth, router]);
-
-  // Initialize Google Sign-In
-  useEffect(() => {
-    if (googleLoaded && window.google && auth) {
-      try {
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-        
-        if (!clientId) {
-          console.error('Google Client ID not found in environment variables');
-          setError('Google Sign-In configuration error');
-          return;
-        }
-
-        console.log('Initializing Google Sign-In...');
-        
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: handleGoogleResponse,
-        });
-
-        const buttonDiv = document.getElementById('googleSignInButton');
-        if (buttonDiv) {
-          window.google.accounts.id.renderButton(
-            buttonDiv,
-            {
-              theme: 'outline',
-              size: 'large',
-              width: '100%',
-              text: 'signin_with',
-              shape: 'rectangular',
-            }
-          );
-          console.log('Google Sign-In button rendered successfully');
-        } else {
-          console.error('Google Sign-In button container not found');
-        }
-      } catch (error) {
-        console.error('Google Sign-In initialization error:', error);
-        setError('Failed to initialize Google Sign-In');
-      }
-    }
-  }, [googleLoaded, auth, handleGoogleResponse]);
+  };
 
   return (
-    <>
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        onLoad={() => setGoogleLoaded(true)}
-        strategy="afterInteractive"
-      />
-      
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
       {/* Background effects */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
@@ -129,16 +87,48 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent>
-          {/* Google Sign-In Button */}
-          <div className="mb-6">
-            <div 
-              id="googleSignInButton" 
-              className="w-full flex justify-center"
-            ></div>
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="username" className="text-sm font-medium text-slate-300 ml-1">Username</label>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition"
+                placeholder="Enter your username"
+                disabled={loading}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium text-slate-300 ml-1">Password</label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-950/50 border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition"
+                placeholder="••••••••"
+                disabled={loading}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold py-3 rounded-lg shadow-lg shadow-emerald-500/20 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            >
+              {loading ? 'Logging in...' : 'Sign In'}
+            </button>
+          </form>
 
           {success && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm mt-4">
               {success}
             </div>
           )}
@@ -149,17 +139,28 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="mt-6 p-4 rounded-lg bg-slate-800/30 border border-slate-700/50">
-            <p className="text-xs text-slate-400 text-center mb-2">
-              🔐 Secure Authentication
-            </p>
-            <p className="text-xs text-slate-500 text-center">
-              Sign in with your Google account to access your secure portal
+          <div className="mt-8 pt-6 border-t border-slate-800 text-center">
+            <p className="text-sm text-slate-400">
+              Don't have a portal yet?{' '}
+              <Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-medium transition">
+                Create one here
+              </Link>
             </p>
           </div>
         </CardContent>
       </Card>
     </div>
-    </>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-500"></div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   );
 }

@@ -5,13 +5,50 @@ import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { RefreshCw, CheckCircle, AlertTriangle, Loader2, Database } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 function RecoveryContent() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const [dataId, setDataId] = useState('');
   const [isRecovering, setIsRecovering] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    totalCount: 0,
+    successRate: 100,
+    lastRecovery: null as string | null
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchStats();
+    }
+  }, [user]);
+
+  const fetchStats = async () => {
+    if (!user) return;
+    try {
+      const response = await fetch('/api/recover', {
+        headers: {
+          'x-user-id': user.id,
+          'x-user-role': user.role,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.stats) {
+          setStats(data.stats);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch recovery stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   useEffect(() => {
     const urlDataId = searchParams.get('dataId');
@@ -35,6 +72,8 @@ function RecoveryContent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-id': user?.id || '',
+          'x-user-role': user?.role || '',
         },
         body: JSON.stringify({ dataId: dataId.trim() }),
       });
@@ -60,7 +99,7 @@ function RecoveryContent() {
       <div className="flex items-center gap-4">
         <RefreshCw className="w-10 h-10 text-orange-400 shadow-lg shadow-orange-500/20" />
         <div>
-          <h1 className="text-4xl font-bold text-white">Recovery Engine</h1>
+          <h1 className="text-4xl font-bold text-white uppercase tracking-tight">Data Recovery Engine</h1>
           <p className="text-slate-400 mt-1">Restore tampered data from blockchain records</p>
         </div>
       </div>
@@ -227,15 +266,21 @@ function RecoveryContent() {
           <CardContent className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-slate-400 text-sm">Total Recoveries</span>
-              <span className="text-white text-sm">0</span>
+              <span className="text-white text-sm">
+                {loadingStats ? '...' : stats.totalCount}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-400 text-sm">Success Rate</span>
-              <span className="text-emerald-400 text-sm">100%</span>
+              <span className="text-emerald-400 text-sm">
+                {loadingStats ? '...' : `${stats.successRate}%`}
+              </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-slate-400 text-sm">Last Recovery</span>
-              <span className="text-white text-sm">Never</span>
+              <span className="text-white text-sm">
+                {loadingStats ? '...' : (stats.lastRecovery ? new Date(stats.lastRecovery).toLocaleString() : 'Never')}
+              </span>
             </div>
           </CardContent>
         </Card>

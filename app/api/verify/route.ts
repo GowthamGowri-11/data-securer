@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySingleRecord, verifyAllRecords } from '@/services/verification-service';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Input validation schema for single record verification
  */

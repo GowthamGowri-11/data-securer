@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Database, Search, Edit, Save, X, AlertTriangle, RefreshCw, Shield } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SensorDataRecord {
   id: string;
@@ -16,6 +17,7 @@ interface SensorDataRecord {
 }
 
 export default function DatabaseManagementPage() {
+  const { user } = useAuth();
   const [records, setRecords] = useState<SensorDataRecord[]>([]);
   const [searchId, setSearchId] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -26,15 +28,23 @@ export default function DatabaseManagementPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRecords();
-  }, []);
+    if (user) {
+      fetchRecords();
+    }
+  }, [user]);
 
   const fetchRecords = async () => {
+    if (!user) return;
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch('/api/sensor-data');
+      const response = await fetch('/api/sensor-data', {
+        headers: {
+          'x-user-id': user.id,
+          'x-user-role': user.role,
+        },
+      });
       const result = await response.json();
 
       if (!response.ok) {
@@ -71,6 +81,8 @@ export default function DatabaseManagementPage() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'x-user-id': user?.id || '',
+          'x-user-role': user?.role || '',
         },
         body: JSON.stringify({
           dataId: recordId,
@@ -105,9 +117,13 @@ export default function DatabaseManagementPage() {
     window.location.href = `/recovery?dataId=${dataId}`;
   };
 
-  const filteredRecords = searchId.trim()
-    ? records.filter(r => r.id.toLowerCase().includes(searchId.toLowerCase()))
-    : records;
+  const filteredRecords = useMemo(() => {
+    return records.filter(record => 
+      record.id.toLowerCase().includes(searchId.toLowerCase()) ||
+      record.dataType.toLowerCase().includes(searchId.toLowerCase()) ||
+      record.dataValue.toLowerCase().includes(searchId.toLowerCase())
+    );
+  }, [records, searchId]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
